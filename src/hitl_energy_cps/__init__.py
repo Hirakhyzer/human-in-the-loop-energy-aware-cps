@@ -5,7 +5,16 @@ from .evaluation import HITLComparison, Outcome, compare_outcomes
 from .human_models import EnergyAwareOperator, SafetyAwareOperator
 from .model import CPSState, ControlAction, DecisionScore, HumanDecision, ReviewDecision
 from .pareto import ParetoPoint, action_point, dominates, pareto_front
-from .policy import ObjectiveWeights, choose_action, score_action
+from .policy import (
+    ObjectiveWeights,
+    SafetyConstraint,
+    action_is_feasible,
+    choose_action,
+    projected_safety_margin,
+    projected_service_quality,
+    rank_actions,
+    score_action,
+)
 from .review import ReviewPolicy, ReviewRequest, should_request_human
 from .simulation import SimulationConfig, SimulationResult, StepRecord, run_simulation
 
@@ -23,9 +32,11 @@ __all__ = [
     "ReviewPolicy",
     "ReviewRequest",
     "SafetyAwareOperator",
+    "SafetyConstraint",
     "SimulationConfig",
     "SimulationResult",
     "StepRecord",
+    "action_is_feasible",
     "action_point",
     "all_cases",
     "choose_action",
@@ -34,6 +45,9 @@ __all__ = [
     "ev_charging_case",
     "manufacturing_case",
     "pareto_front",
+    "projected_safety_margin",
+    "projected_service_quality",
+    "rank_actions",
     "run_simulation",
     "score_action",
     "should_request_human",
