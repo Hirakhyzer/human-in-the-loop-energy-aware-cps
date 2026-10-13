@@ -4,7 +4,7 @@ from dataclasses import dataclass, replace
 from typing import Callable
 
 from .model import CPSState, ControlAction, ReviewDecision
-from .policy import ObjectiveWeights, score_action
+from .policy import ObjectiveWeights, SafetyConstraint, action_is_feasible, rank_actions
 from .review import ReviewPolicy, should_request_human
 
 
@@ -13,12 +13,16 @@ class SimulationConfig:
     steps: int = 24
     review_cost: float = 0.05
     minimum_safety_margin: float = 0.0
+    minimum_service_quality: float = 0.0
+    enforce_hard_constraints: bool = True
 
     def __post_init__(self) -> None:
         if self.steps < 1:
             raise ValueError("steps must be positive")
         if self.review_cost < 0:
             raise ValueError("review_cost must be non-negative")
+        if not 0.0 <= self.minimum_service_quality <= 1.0:
+            raise ValueError("minimum_service_quality must be within [0, 1]")
 
 
 @dataclass(frozen=True)
@@ -33,6 +37,7 @@ class StepRecord:
     safety_margin: float
     service_quality: float
     unsafe: bool
+    constraint_fallback: bool = False
 
 
 @dataclass(frozen=True)
@@ -47,6 +52,7 @@ class SimulationResult:
     rejection_count: int
     unsafe_steps: int
     intervention_cost: float
+    constraint_fallbacks: int = 0
 
 
 HumanPolicy = Callable[[CPSState, ControlAction, list[ControlAction]], tuple[ReviewDecision, ControlAction]]
@@ -59,6 +65,17 @@ def _advance(state: CPSState, action: ControlAction) -> CPSState:
         safety_margin=state.safety_margin + action.safety_delta,
         service_quality=max(0.0, min(1.0, state.service_quality + action.service_delta)),
         urgency=max(0.0, state.urgency - 0.02),
+    )
+
+
+def _safest_fallback(state: CPSState, actions: list[ControlAction]) -> ControlAction:
+    return max(
+        actions,
+        key=lambda action: (
+            state.safety_margin + action.safety_delta,
+            state.service_quality + action.service_delta,
+            -action.energy_cost,
+        ),
     )
 
 
@@ -77,16 +94,25 @@ def run_simulation(
     state = initial_state
     records: list[StepRecord] = []
     total_energy = 0.0
-    reviews = modifications = rejections = unsafe_steps = 0
+    reviews = modifications = rejections = unsafe_steps = fallbacks = 0
+    constraint = SafetyConstraint(config.minimum_safety_margin, config.minimum_service_quality)
 
     for step in range(config.steps):
-        ranked = sorted(
-            (score_action(state, action, weights=weights) for action in actions),
-            key=lambda item: item.total_score,
-            reverse=True,
-        )
+        all_ranked = rank_actions(state, actions, weights=weights)
+        constraint_fallback = False
+        if config.enforce_hard_constraints:
+            feasible = [score for score in all_ranked if action_is_feasible(state, score.action, constraint)]
+            if feasible:
+                ranked = feasible
+            else:
+                ranked = all_ranked
+                constraint_fallback = True
+                fallbacks += 1
+        else:
+            ranked = all_ranked
+
         proposed = ranked[0].action
-        review = should_request_human(state, ranked, policy=review_policy)
+        review = should_request_human(state, all_ranked, policy=review_policy)
         applied = proposed
         decision: ReviewDecision | None = None
 
@@ -98,10 +124,14 @@ def run_simulation(
                 applied = selected
             elif decision == ReviewDecision.REJECT:
                 rejections += 1
-                # A rejected proposal uses the lowest-energy action among those
-                # that do not reduce the current safety margin, when available.
-                feasible = [a for a in actions if a.safety_delta >= 0.0]
-                applied = min(feasible or actions, key=lambda a: a.energy_cost)
+                applied = selected
+
+        if config.enforce_hard_constraints and not action_is_feasible(state, applied, constraint):
+            feasible_actions = [a for a in actions if action_is_feasible(state, a, constraint)]
+            applied = min(feasible_actions, key=lambda a: a.energy_cost) if feasible_actions else _safest_fallback(state, actions)
+            if not constraint_fallback:
+                constraint_fallback = True
+                fallbacks += 1
 
         state = _advance(state, applied)
         total_energy += applied.energy_cost
@@ -119,6 +149,7 @@ def run_simulation(
                 safety_margin=state.safety_margin,
                 service_quality=state.service_quality,
                 unsafe=unsafe,
+                constraint_fallback=constraint_fallback,
             )
         )
 
@@ -133,4 +164,5 @@ def run_simulation(
         rejection_count=rejections,
         unsafe_steps=unsafe_steps,
         intervention_cost=reviews * config.review_cost,
+        constraint_fallbacks=fallbacks,
     )
