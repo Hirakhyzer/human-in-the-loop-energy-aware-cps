@@ -38,6 +38,7 @@ class StepRecord:
     service_quality: float
     unsafe: bool
     constraint_fallback: bool = False
+    safety_filter_intervened: bool = False
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,7 @@ class SimulationResult:
     unsafe_steps: int
     intervention_cost: float
     constraint_fallbacks: int = 0
+    safety_filter_interventions: int = 0
 
 
 HumanPolicy = Callable[[CPSState, ControlAction, list[ControlAction]], tuple[ReviewDecision, ControlAction]]
@@ -94,16 +96,21 @@ def run_simulation(
     state = initial_state
     records: list[StepRecord] = []
     total_energy = 0.0
-    reviews = modifications = rejections = unsafe_steps = fallbacks = 0
+    reviews = modifications = rejections = unsafe_steps = fallbacks = safety_filters = 0
     constraint = SafetyConstraint(config.minimum_safety_margin, config.minimum_service_quality)
 
     for step in range(config.steps):
         all_ranked = rank_actions(state, actions, weights=weights)
+        unconstrained_proposed = all_ranked[0].action
         constraint_fallback = False
+        safety_filter_intervened = False
         if config.enforce_hard_constraints:
             feasible = [score for score in all_ranked if action_is_feasible(state, score.action, constraint)]
             if feasible:
                 ranked = feasible
+                safety_filter_intervened = ranked[0].action.name != unconstrained_proposed.name
+                if safety_filter_intervened:
+                    safety_filters += 1
             else:
                 ranked = all_ranked
                 constraint_fallback = True
@@ -112,7 +119,9 @@ def run_simulation(
             ranked = all_ranked
 
         proposed = ranked[0].action
-        review = should_request_human(state, all_ranked, policy=review_policy)
+        # Review the action that is actually proposed after automated guardrails.
+        # This keeps human-review reasons aligned with the auditable proposal.
+        review = should_request_human(state, ranked, policy=review_policy)
         applied = proposed
         decision: ReviewDecision | None = None
 
@@ -150,6 +159,7 @@ def run_simulation(
                 service_quality=state.service_quality,
                 unsafe=unsafe,
                 constraint_fallback=constraint_fallback,
+                safety_filter_intervened=safety_filter_intervened,
             )
         )
 
@@ -165,4 +175,5 @@ def run_simulation(
         unsafe_steps=unsafe_steps,
         intervention_cost=reviews * config.review_cost,
         constraint_fallbacks=fallbacks,
+        safety_filter_interventions=safety_filters,
     )
