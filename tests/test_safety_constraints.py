@@ -51,8 +51,34 @@ def test_simulation_applies_safe_action_under_energy_dominant_weights():
         config=SimulationConfig(steps=1, minimum_safety_margin=0.0),
         weights=ObjectiveWeights(energy=0.99, safety=0.01, service=0.0),
     )
+    assert result.records[0].proposed_action == "safe"
     assert result.records[0].applied_action == "safe"
+    assert result.records[0].safety_filter_intervened
+    assert result.safety_filter_interventions == 1
+    assert result.constraint_fallbacks == 0
     assert result.unsafe_steps == 0
+
+
+def test_guardrail_review_reasons_describe_actual_feasible_proposal():
+    state = CPSState("test", energy_demand=0.8, safety_margin=0.3, service_quality=0.8)
+    cheap_unsafe = ControlAction("cheap-unsafe", 0.01, -0.5, 0.0)
+    safe = ControlAction("safe", 1.0, 0.1, 0.0)
+    result = run_simulation(
+        state,
+        [cheap_unsafe, safe],
+        config=SimulationConfig(steps=1, minimum_safety_margin=0.0),
+        weights=ObjectiveWeights(energy=1.0, safety=0.0, service=0.0),
+        review_policy=ReviewPolicy(
+            safety_margin_threshold=0.1,
+            projected_safety_margin_threshold=0.0,
+            score_gap_threshold=0.0,
+            urgency_threshold=1.0,
+        ),
+    )
+    record = result.records[0]
+    assert record.proposed_action == "safe"
+    assert record.safety_filter_intervened
+    assert "unsafe-projected-margin" not in record.review_reasons
 
 
 def test_impossible_constraints_use_auditable_safest_fallback():
@@ -66,4 +92,6 @@ def test_impossible_constraints_use_auditable_safest_fallback():
     )
     assert result.records[0].applied_action == "less-bad"
     assert result.records[0].constraint_fallback
+    assert not result.records[0].safety_filter_intervened
     assert result.constraint_fallbacks == 1
+    assert result.safety_filter_interventions == 0
