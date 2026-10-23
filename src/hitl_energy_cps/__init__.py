@@ -4,6 +4,7 @@ from .adaptive_review import AdaptiveReviewDecision, adapt_review_policy
 from .domains import all_cases, ev_charging_case, manufacturing_case, smart_building_case
 from .evaluation import HITLComparison, Outcome, compare_outcomes
 from .human_models import EnergyAwareOperator, SafetyAwareOperator
+from .intervention_timing import InterventionTiming, InterventionTimingConfig, estimate_intervention_timing
 from .model import CPSState, ControlAction, DecisionScore, HumanDecision, ReviewDecision
 from .operator_state import OperatorBurden, OperatorState, operator_burden
 from .pareto import ParetoPoint, action_point, dominates, pareto_front
@@ -28,6 +29,8 @@ __all__ = [
     "EnergyAwareOperator",
     "HITLComparison",
     "HumanDecision",
+    "InterventionTiming",
+    "InterventionTimingConfig",
     "ObjectiveWeights",
     "OperatorBurden",
     "OperatorState",
@@ -48,6 +51,7 @@ __all__ = [
     "choose_action",
     "compare_outcomes",
     "dominates",
+    "estimate_intervention_timing",
     "ev_charging_case",
     "manufacturing_case",
     "operator_burden",
