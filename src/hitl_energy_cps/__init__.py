@@ -1,9 +1,11 @@
 """Human-in-the-loop energy-aware CPS research package."""
 
+from .adaptive_review import AdaptiveReviewDecision, adapt_review_policy
 from .domains import all_cases, ev_charging_case, manufacturing_case, smart_building_case
 from .evaluation import HITLComparison, Outcome, compare_outcomes
 from .human_models import EnergyAwareOperator, SafetyAwareOperator
 from .model import CPSState, ControlAction, DecisionScore, HumanDecision, ReviewDecision
+from .operator_state import OperatorBurden, OperatorState, operator_burden
 from .pareto import ParetoPoint, action_point, dominates, pareto_front
 from .policy import (
     ObjectiveWeights,
@@ -19,6 +21,7 @@ from .review import ReviewPolicy, ReviewRequest, should_request_human
 from .simulation import SimulationConfig, SimulationResult, StepRecord, run_simulation
 
 __all__ = [
+    "AdaptiveReviewDecision",
     "CPSState",
     "ControlAction",
     "DecisionScore",
@@ -26,6 +29,8 @@ __all__ = [
     "HITLComparison",
     "HumanDecision",
     "ObjectiveWeights",
+    "OperatorBurden",
+    "OperatorState",
     "Outcome",
     "ParetoPoint",
     "ReviewDecision",
@@ -38,12 +43,14 @@ __all__ = [
     "StepRecord",
     "action_is_feasible",
     "action_point",
+    "adapt_review_policy",
     "all_cases",
     "choose_action",
     "compare_outcomes",
     "dominates",
     "ev_charging_case",
     "manufacturing_case",
+    "operator_burden",
     "pareto_front",
     "projected_safety_margin",
     "projected_service_quality",
