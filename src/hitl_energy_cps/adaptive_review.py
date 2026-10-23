@@ -21,7 +21,7 @@ def adapt_review_policy(
 
     High operator burden should reduce discretionary review demand rather than
     weaken projected-safety safeguards. The policy therefore tightens only the
-    ambiguity/urgency pathways while leaving safety thresholds unchanged.
+    ambiguity/urgency pathways while leaving safety and service thresholds unchanged.
     """
     burden = operator_burden(operator)
     if burden.score >= 75:
@@ -38,6 +38,7 @@ def adapt_review_policy(
     policy = ReviewPolicy(
         safety_margin_threshold=base.safety_margin_threshold,
         projected_safety_margin_threshold=base.projected_safety_margin_threshold,
+        projected_service_threshold=base.projected_service_threshold,
         score_gap_threshold=gap,
         urgency_threshold=urgency,
     )
