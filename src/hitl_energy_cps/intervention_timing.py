@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import ceil, inf
+from math import floor, inf
 
 from .model import CPSState, ControlAction
 from .operator_state import OperatorState, operator_burden
@@ -44,10 +44,10 @@ def estimate_intervention_timing(
 ) -> InterventionTiming:
     """Estimate when human review must be requested before safety is unrecoverable.
 
-    The model projects repeated execution of the currently proposed action. It is
-    intentionally deterministic and conservative: it estimates the first step at
-    which the projected safety margin drops below the configured boundary, then
-    subtracts operator response latency and a preparation buffer.
+    The model projects repeated execution of the currently proposed action. It
+    estimates the first step at which the projected safety margin is strictly
+    below the configured boundary, then subtracts burden-adjusted operator
+    response latency and an explicit preparation buffer.
     """
     burden = operator_burden(operator)
     available_margin = state.safety_margin - config.minimum_safety_margin
@@ -58,8 +58,10 @@ def estimate_intervention_timing(
         steps_to_boundary = None
     else:
         loss_per_step = -proposed.safety_delta
-        # Crossing occurs on the first step whose cumulative loss exceeds margin.
-        steps_to_boundary = int(available_margin // loss_per_step) + 1
+        # Add a scale-aware tolerance so exact-boundary cases are not classified
+        # as violations merely because of binary floating-point representation.
+        tolerance = 1e-12 * max(1.0, abs(available_margin), loss_per_step)
+        steps_to_boundary = floor((available_margin + tolerance) / loss_per_step) + 1
 
     if steps_to_boundary is None or steps_to_boundary > config.planning_horizon_steps:
         return InterventionTiming(
