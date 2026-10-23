@@ -14,10 +14,12 @@ def test_degrading_action_produces_latest_safe_request_window():
         OperatorState(response_latency_s=2.0),
         config=InterventionTimingConfig(step_duration_s=1.0, preparation_buffer_s=1.0),
     )
-    assert timing.steps_to_boundary == 5
-    assert timing.time_to_boundary_s == 5.0
-    assert timing.latest_safe_request_s == 2.0
-    assert timing.latest_safe_request_step == 2
+    # Exactly reaching zero at step five is still on the configured boundary;
+    # the first strict violation occurs at step six.
+    assert timing.steps_to_boundary == 6
+    assert timing.time_to_boundary_s == 6.0
+    assert timing.latest_safe_request_s == 3.0
+    assert timing.latest_safe_request_step == 3
     assert timing.status == "scheduled"
 
 
