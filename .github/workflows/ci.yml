@@ -19,10 +19,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -35,3 +35,11 @@ jobs:
 
       - name: Import smoke test
         run: python -c "import hitl_energy_cps; print('hitl_energy_cps import OK')"
+
+      - name: Run deterministic demo
+        if: matrix.python-version == '3.12'
+        run: python examples/run_demo.py
+
+      - name: Run paired benchmark
+        if: matrix.python-version == '3.12'
+        run: python benchmarks/run_paired_experiment.py
