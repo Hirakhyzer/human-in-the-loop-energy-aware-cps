@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from math import floor, inf
+from math import floor, inf, isfinite
 
 from .model import CPSState, ControlAction
 from .operator_state import OperatorState, operator_burden
@@ -15,10 +15,21 @@ class InterventionTimingConfig:
     preparation_buffer_s: float = 1.0
 
     def __post_init__(self) -> None:
+        for name in (
+            "minimum_safety_margin",
+            "step_duration_s",
+            "preparation_buffer_s",
+        ):
+            if not isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be finite")
         if self.step_duration_s <= 0:
             raise ValueError("step_duration_s must be positive")
-        if self.planning_horizon_steps < 1:
-            raise ValueError("planning_horizon_steps must be positive")
+        if (
+            not isinstance(self.planning_horizon_steps, int)
+            or isinstance(self.planning_horizon_steps, bool)
+            or self.planning_horizon_steps < 1
+        ):
+            raise ValueError("planning_horizon_steps must be a positive integer")
         if self.preparation_buffer_s < 0:
             raise ValueError("preparation_buffer_s must be non-negative")
 
@@ -29,7 +40,7 @@ class InterventionTiming:
     steps_to_boundary: int | None
     time_to_boundary_s: float
     effective_human_latency_s: float
-    latest_safe_request_s: float
+    latest_safe_request_s: float | None
     latest_safe_request_step: int | None
     slack_s: float
     status: str
@@ -48,6 +59,10 @@ def estimate_intervention_timing(
     estimates the first step at which the projected safety margin is strictly
     below the configured boundary, then subtracts burden-adjusted operator
     response latency and an explicit preparation buffer.
+
+    ``latest_safe_request_s`` is ``None`` when even an immediate request cannot
+    complete the modeled human response before the predicted safety boundary.
+    That case is intentionally distinct from a feasible latest request at t=0.
     """
     burden = operator_burden(operator)
     available_margin = state.safety_margin - config.minimum_safety_margin
@@ -77,17 +92,26 @@ def estimate_intervention_timing(
 
     time_to_boundary = steps_to_boundary * config.step_duration_s
     response_budget = burden.effective_latency_s + config.preparation_buffer_s
-    latest_request = max(0.0, time_to_boundary - response_budget)
-    latest_step = max(0, int(latest_request // config.step_duration_s))
     slack = time_to_boundary - response_budget
+
+    if slack < 0:
+        # No request time at or after t=0 can satisfy the modeled response budget.
+        return InterventionTiming(
+            request_now=True,
+            steps_to_boundary=steps_to_boundary,
+            time_to_boundary_s=time_to_boundary,
+            effective_human_latency_s=burden.effective_latency_s,
+            latest_safe_request_s=None,
+            latest_safe_request_step=None,
+            slack_s=slack,
+            status="no-feasible-request-window",
+        )
+
+    latest_request = slack
+    latest_step = int(latest_request // config.step_duration_s)
     request_now = slack <= config.step_duration_s
 
-    if slack <= 0:
-        status = "late-or-immediate"
-    elif request_now:
-        status = "request-now"
-    else:
-        status = "scheduled"
+    status = "request-now" if request_now else "scheduled"
 
     return InterventionTiming(
         request_now=request_now,
