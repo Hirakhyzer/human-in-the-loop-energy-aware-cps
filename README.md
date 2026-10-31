@@ -44,6 +44,17 @@ Evaluation / Adaptation
 - deterministic benchmark scenarios;
 - reproducible experiment artifacts.
 
+## Intervention-timing semantics
+
+The intervention-timing module projects when repeated use of a proposed action would first cross the configured safety boundary and subtracts burden-adjusted human response time plus an explicit preparation buffer.
+
+- `scheduled` means there is a positive request window before the modeled deadline.
+- `request-now` means a request at the current instant is still feasible but little or no slack remains.
+- `no-feasible-request-window` means the modeled response budget is already longer than the time remaining to the predicted safety boundary. In this case `latest_safe_request_s` and `latest_safe_request_step` are `None`; the framework does **not** report time zero as if an on-time human response were still possible.
+- `outside-horizon` means no degrading boundary is predicted inside the configured planning horizon.
+
+These timing results are properties of the reduced-order model and configured human-response abstraction; they are not deployment-level safety guarantees.
+
 ## Initial domains
 
 The first benchmark suite focuses on three synthetic reduced-order domains:
@@ -64,7 +75,7 @@ This repository is a research prototype. It does not claim that simulated human 
 python -m pip install -e ".[dev]"
 pytest -q
 python examples/run_demo.py
-python benchmarks/run_hitl_benchmark.py
+python benchmarks/run_paired_experiment.py
 ```
 
 ## Planned research tracks
